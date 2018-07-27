@@ -27,10 +27,23 @@ class NWBIO(BaseIO):
 
         assert os.path.exists(self.filename), "Cannot locate file: {}".format(self.filename)
 
-        io = NWBHDF5IO(self.filename)
-        nwb= io.read()
+        io = NWBHDF5IO(self.filename, mode='r')
+        nwb = io.read()
 
-        # return block
+        blk = Block()
 
-    def write_block(self, block):
+
+    def write_block(self, block, **kargs):
         raise NotImplementedError('NWBIO is a read-only I/O class.')
+
+
+if __name__ == '__main__':
+
+    _root_dir = '/auto/tdrive/mschachter/nwb'
+    _bird_name = 'GreBlu9508M'
+    _block_site = 'Site1_Call1'
+
+    _nwb_file = os.path.join(_root_dir, _bird_name, '{}_{}.nwb'.format(_bird_name, _block_site))
+
+    _io = NWBIO(_nwb_file)
+    _blk = _io.read_block()

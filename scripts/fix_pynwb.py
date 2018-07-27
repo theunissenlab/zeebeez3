@@ -28,18 +28,14 @@ def write_multiple_nwb_files(root_dir='/tmp'):
 
         session_desc = "A single recording session"
 
-        exp_desc = """ A randomly interleaved mixture of Zebra finch vocalizations, songs, and modulation limited
-                       noise played to a Zebra finch under urethane anaesthesia in an acute experiment. Two 16 microwire
-                       electrode arrays were implanted, one in each hemisphere. Experiments  designed and performed by
-                       Julie Elie, vocal repertoire recorded by Julie Elie.
-                   """
+        exp_desc = "An experiment."
 
         nf = NWBFile(recording_name, session_desc,
                      'bird',
                      rec_datetime,
-                     experimenter='Julie Elie',
-                     lab='Theunissen Lab',
-                     institution='UC Berkeley',
+                     experimenter='Experi Menter',
+                     lab='The Lab',
+                     institution='University of Shaz',
                      experiment_description=exp_desc,
                      session_id='bird')
 
@@ -110,8 +106,6 @@ def write_multiple_nwb_files(root_dir='/tmp'):
                     spike_times = [0.5, 1.5, 3.5]
                     waveforms = np.random.randn(3, 18)
 
-                    print('{} electrode_number={}, e_num={}, k={}'.format(unit_name, electrode_number, e_num, k))
-
                     if unit_name.startswith('RF Sort'):
                         xarr = unit_name.split(' ')
                         unit_num = xarr[-1]
@@ -141,20 +135,7 @@ def write_multiple_nwb_files(root_dir='/tmp'):
         all_series = list()
         all_series.extend(lfp_series.values())
         all_series.extend(spike_series.values())
-        print('len(all_series)=',len(all_series))
         nf.add_acquisition(all_series)
-
-        # create trials for each stim presentation
-        """
-        nf.add_trial_column('stim_id', 'The ID of the sound played during the trial.')
-        nf.add_trial_column('trial', 'The number of times this stimulus has been presented.')
-        for stim_epoch_data in block_data['epochs']:
-            stim_id = stim_epoch_data['stim_id']
-            trial_num = stim_epoch_data['trial']
-            stime = stim_epoch_data['start']
-            etime = stim_epoch_data['end']
-            nf.add_trial({'start':stime, 'end':etime, 'stim_id':stim_id, 'trial':trial_num})
-        """
 
         print('Writing to {}'.format(nwb_file))
         with NWBHDF5IO(nwb_file, mode='w') as io:
@@ -166,4 +147,12 @@ def write_multiple_nwb_files(root_dir='/tmp'):
 
 if __name__ == '__main__':
 
-    write_multiple_nwb_files()
+    write_multiple_nwb_files('/tmp')
+
+    _nwb_file = os.path.join('/tmp/bird_Site1.nwb')
+    _io = NWBHDF5IO(_nwb_file, mode='r')
+    _nwb = _io.read()
+
+
+
+
