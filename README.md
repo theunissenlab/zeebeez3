@@ -33,5 +33,11 @@ Now activate that environment:
 
     source activate zeebeez3
 
+Install the latest version of pynwb (make sure the zeebeez3 environment is activated):
+
+    git clone https://github.com/NeurodataWithoutBorders/pynwb.git
+    cd pynwb
+    pip install .
+
 
 
