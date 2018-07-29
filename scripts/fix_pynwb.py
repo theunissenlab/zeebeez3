@@ -14,134 +14,107 @@ def write_multiple_nwb_files(root_dir='/tmp'):
 
     rec_datetime = date_parser.parse('03/22/2018 15:35:22')
 
-    # create an electrode array, electrode groups, and electrode table for the electrodes
-    lfp_series = dict()
-    spike_series = dict()
+    block = 'Site1'
 
-    for block in ['Site1', 'Site2']:
+    recording_name = '{}_{}'.format('bird', block)
 
-        print('*************** Processing block {}'.format(block))
+    nwb_file = os.path.join(root_dir, '{}.nwb'.format(recording_name))
 
-        recording_name = '{}_{}'.format('bird', block)
+    session_desc = "A single recording session"
 
-        nwb_file = os.path.join(root_dir, '{}.nwb'.format(recording_name))
+    exp_desc = "An experiment."
 
-        session_desc = "A single recording session"
+    nf = NWBFile(recording_name, session_desc,
+                 'bird',
+                 rec_datetime,
+                 experimenter='Experi Menter',
+                 lab='The Lab',
+                 institution='University of Shaz',
+                 experiment_description=exp_desc,
+                 session_id='bird')
 
-        exp_desc = "An experiment."
+    hemi = 'L'
 
-        nf = NWBFile(recording_name, session_desc,
-                     'bird',
-                     rec_datetime,
-                     experimenter='Experi Menter',
-                     lab='The Lab',
-                     institution='University of Shaz',
-                     experiment_description=exp_desc,
-                     session_id='bird')
+    electrode_array_name = '16 electrode microwire array on {} hemisphere'.format(hemi)
+    electrode_array = nf.create_device(name=electrode_array_name, source='')
 
-        # create the electrodes and electrode tables
-        for hemi in ['R', 'L']:
+    # create an electrode group
+    egrp_desc = """ The (x,y) locations of the electrodes refer to the distance from region midline and distance
+                    from L2A, respectively, in mm.            
+                """
 
-            electrode_array_name = '16 electrode microwire array on {} hemisphere'.format(hemi)
-            electrode_array = nf.create_device(name=electrode_array_name, source='')
+    electrode_group = nf.create_electrode_group(hemi,
+                                                source=electrode_array_name,
+                                                description=egrp_desc,
+                                                location='{} Hemisphere, Field L, CM, NCM'.format(hemi),
+                                                device=electrode_array)
 
-            # create an electrode group
-            egrp_desc = """ The (x,y) locations of the electrodes refer to the distance from region midline and distance
-                            from L2A, respectively, in mm.            
-                        """
+    # add electrodes to electrode group
+    electrode_start = 0
+    if hemi == 'R':
+        electrode_start = 16
+    electrode_numbers = list(np.arange(electrode_start, electrode_start + 16))
+    for electrode_number in electrode_numbers:
 
-            electrode_group = nf.create_electrode_group(hemi,
-                                                        source=electrode_array_name,
-                                                        description=egrp_desc,
-                                                        location='{} Hemisphere, Field L, CM, NCM'.format(hemi),
-                                                        device=electrode_array)
+        nf.add_electrode(electrode_number-1,
+                         x=np.random.randn(), y=np.random.randn(), z=0.0,
+                         imp=0.0,
+                         location='cortex',
+                         filtering='none',
+                         description='An electrode',
+                         group=electrode_group)
 
-            # add electrodes to electrode group
-            electrode_start = 0
-            if hemi == 'R':
-                electrode_start = 16
-            electrode_numbers = list(np.arange(electrode_start, electrode_start + 16))
-            for electrode_number in electrode_numbers:
+    # create an electrode table region
+    etable = nf.create_electrode_table_region(electrode_numbers,
+                                              'All electrodes in array for hemisphere {}'.format(hemi))
 
-                nf.add_electrode(electrode_number-1,
-                                 x=np.random.randn(), y=np.random.randn(), z=0.0,
-                                 imp=0.0,
-                                 location='cortex',
-                                 filtering='none',
-                                 description='An electrode',
-                                 group=electrode_group)
+    lfp_data = np.random.randn(len(electrode_numbers), 1000)
+    sr = 1000.
+    t = np.arange(lfp_data.shape[1]) / sr
 
-            # create an electrode table region
-            etable = nf.create_electrode_table_region(electrode_numbers,
-                                                      'All electrodes in array for hemisphere {}'.format(hemi))
+    # add the raw LFP
+    lfp_series_name = 'Multi-electrode LFP on {} hemisphere from block {}'.format(hemi, block)
+    lfp = ElectricalSeries(
+        lfp_series_name,
+        electrode_array_name,
+        lfp_data,
+        etable,
+        timestamps=t,
+        resolution=1e-12,
+        comments='',
+        description='Low-passed LFP recorded from microwire array'
+    )
 
-            lfp_data = np.random.randn(len(electrode_numbers), 1000)
-            sr = 1000.
-            t = np.arange(lfp_data.shape[1]) / sr
+    # add the spikes and their waveforms
+    electrode_number = 0
+    spike_times = [0.5, 1.5, 3.5]
+    waveforms = np.random.randn(3, 18)
+    sort_type = 'Multi-unit'
 
-            # add the raw LFP
-            lfp_series_name = 'Multi-electrode LFP on {} hemisphere from block {}'.format(hemi, block)
-            lfp = ElectricalSeries(
-                lfp_series_name,
-                electrode_array_name,
-                lfp_data,
-                etable,
-                timestamps=t,
-                resolution=1e-12,
-                comments='',
-                description='Low-passed LFP recorded from microwire array'
-            )
+    full_unit_name = '{} on electrode {}'.format(sort_type, electrode_number)
+    spikes = SpikeEventSeries(full_unit_name, lfp_series_name,
+                              waveforms, spike_times, etable,
+                              resolution=1e-12, conversion=1e6,
+                              comments='',
+                              description='',
+                              )
 
-            lfp_series[hemi] = lfp
+    print('\tAdding spikes acquisition: {} ({}), waveforms.shape={}'.format(full_unit_name, sort_type,
+                                                                            str(waveforms.shape)))
 
-            # add the spikes and their waveforms
-            for electrode_number in electrode_numbers:
+    # adding the LFP is fine
+    nf.add_acquisition(lfp)
 
-                for k in range(3):
-                    if k == 0:
-                        unit_name = 'Chan{} Code0'.format(electrode_number)
-                    else:
-                        unit_name = 'RF Sort unit {}'.format(k+1)
+    ########################################################
+    # adding even a single spike event series causes the error
+    ########################################################
+    nf.add_acquisition(spikes)
 
-                    spike_times = [0.5, 1.5, 3.5]
-                    waveforms = np.random.randn(3, 18)
+    print('Writing to {}'.format(nwb_file))
+    with NWBHDF5IO(nwb_file, mode='w') as io:
+        io.write(nf)
 
-                    if unit_name.startswith('RF Sort'):
-                        xarr = unit_name.split(' ')
-                        unit_num = xarr[-1]
-                        sort_type = 'Spike-sorted unit {}'.format(unit_num)
-
-                    elif unit_name.startswith('Chan'):
-                        if 'Code0' not in unit_name:
-                            print('Skipping multi-unit channel with non-zero sort code')
-                            continue
-                        sort_type = 'Multi-unit'
-                    else:
-                        raise Exception('Unknown unit name: {}'.format(unit_name))
-
-                    full_unit_name = '{} on electrode {}'.format(sort_type, electrode_number)
-                    spikes = SpikeEventSeries(full_unit_name, lfp_series_name,
-                                              waveforms, spike_times, etable,
-                                              resolution=1e-12, conversion=1e6,
-                                              comments='',
-                                              description='',
-                                              )
-
-                    print('\tAdding spikes acquisition: {} ({}), waveforms.shape={}'.format(full_unit_name, sort_type,
-                                                                                            str(waveforms.shape)))
-
-                    spike_series[(hemi, electrode_number, unit_name)] = spikes
-
-        all_series = list()
-        all_series.extend(lfp_series.values())
-        all_series.extend(spike_series.values())
-        nf.add_acquisition(all_series)
-
-        print('Writing to {}'.format(nwb_file))
-        with NWBHDF5IO(nwb_file, mode='w') as io:
-            io.write(nf)
-
-        del nf
+    del nf
 
 
 

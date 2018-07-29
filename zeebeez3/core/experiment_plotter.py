@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from soundsig.timefreq import gaussian_stft, log_spectrogram
-from zeebeez.core.experiment import segment_to_unique_name, Experiment
+from zeebeez3.core.experiment import segment_to_unique_name, Experiment
 
 
 class ExperimentPlotter(object):
