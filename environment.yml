@@ -13,9 +13,8 @@ dependencies:
   - scipy
   - scikit-image
   - scikit-learn
-  - pynwb
   - pip
-  - ruamel.yaml=0.15.37
   - pip:
     - soundsig
     - neo
+    - pynwb

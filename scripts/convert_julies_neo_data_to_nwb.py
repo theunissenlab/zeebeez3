@@ -230,9 +230,10 @@ def convert_from_old_neo(old_file, bird_name, electrode_df):
                                  group=electrode_group)
 
             # create an electrode table region
-            electrode_numbers = list(np.array(sorted(gdf.electrode.unique())) - 1)
+            electrode_numbers = list(np.array(sorted(ggdf.electrode.unique())) - 1)
+            print('electrode_numbers=',electrode_numbers)
             etable = nf.create_electrode_table_region(electrode_numbers,
-                                                      'All electrodes in array for hemisphere {}'.format(hemi))
+                                                          'All electrodes in array for hemisphere {} with LFP'.format(hemi))
 
             lfp_data = np.array([block_data['electrodes'][e + 1]['lfp'] for e in electrode_numbers])
             sr = block_data['sample_rate']

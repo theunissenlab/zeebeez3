@@ -27,8 +27,8 @@ class NWBIO(BaseIO):
 
         assert os.path.exists(self.filename), "Cannot locate file: {}".format(self.filename)
 
-        io = NWBHDF5IO(self.filename, mode='r')
-        nwb = io.read()
+        with NWBHDF5IO(self.filename, mode='r') as io:
+            nwb = io.read()
 
         blk = Block()
 

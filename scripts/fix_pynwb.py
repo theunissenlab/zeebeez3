@@ -66,7 +66,7 @@ def write_multiple_nwb_files(root_dir='/tmp'):
 
     # create an electrode table region
     etable = nf.create_electrode_table_region(electrode_numbers,
-                                              'All electrodes in array for hemisphere {}'.format(hemi))
+                                              'All electrodes in array for hemisphere {} with LFP'.format(hemi))
 
     lfp_data = np.random.randn(len(electrode_numbers), 1000)
     sr = 1000.
