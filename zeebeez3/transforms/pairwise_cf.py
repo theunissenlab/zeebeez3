@@ -570,7 +570,7 @@ class PairwiseCFTransform(object):
                                     plot=False,
                                     merge_freqs=False):
         """ Export data in a format appropriate for the CategoricalDecoder or AcousticDecoder (in
-            zeebeez.decoders.{categorical,acoustic}_decoder.py). """
+            zeebeez.models.{categorical,acoustic}_decoder.py). """
 
         bs_data = dict()
         integer2prop = []

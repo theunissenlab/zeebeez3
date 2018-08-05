@@ -13,6 +13,8 @@ dependencies:
   - scipy
   - scikit-image
   - scikit-learn
+  - tensorflow
+  - keras
   - pip
   - pip:
     - soundsig
