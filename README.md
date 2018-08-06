@@ -33,11 +33,13 @@ Now activate that environment:
 
     source activate zeebeez3
 
-Install the latest version of pynwb (make sure the zeebeez3 environment is activated):
+## Running Notebooks
 
-    git clone https://github.com/NeurodataWithoutBorders/pynwb.git
-    cd pynwb
-    pip install .
+To run the notebooks, first start jupyter notebooks from the zeebeez3 notebooks directory:
 
-
+    cd notebooks
+    jupyter notebook
+    
+A web browser tab will pop up. Select the notebook that you're interested in.
+  
 
