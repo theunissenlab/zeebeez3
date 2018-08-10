@@ -7,8 +7,6 @@ import matplotlib.pyplot as plt
 from sklearn.cross_validation import KFold
 from sklearn.linear_model import Ridge
 
-from lasp.basis import cubic_spline_basis
-
 
 class StagewiseSplineRidgeRegression(object):
     """
@@ -148,3 +146,61 @@ class StagewiseSplineRidgeRegression(object):
     def predict(self, X):
         pass
 
+
+def cubic_spline_basis(x, num_knots=3, return_knots=False, knots=None):
+
+    if knots is None:
+        p = 100. / (num_knots + 1)
+        knots = np.array([np.percentile(x, int((k + 1) * p)) for k in range(num_knots)])
+        assert knots.min() >= x.min()
+        assert knots.max() <= x.max()
+        if len(np.unique(knots)) != len(knots):
+            # print '[cubic_spline_basis] number of unique kernels is less than the degrees of freedom, trying wider knot spacing (q10, q50, q90)'
+            knots = [np.percentile(x, 10), np.percentile(x, 50), np.percentile(x, 90)]
+        assert len(np.unique(knots)) == len(knots), '# of unique kernels is less than the degrees of freedom!'
+
+    num_knots = len(knots)
+    df = num_knots+3
+    B = np.zeros([len(x), df])
+    for k in range(3):
+        B[:, k] = x**(k+1)
+
+    for k in range(num_knots):
+        i = x > knots[k]
+        B[i, k+3] = (x[i]-knots[k])**3
+
+    if return_knots:
+        return B,knots
+    return B
+
+
+def natural_spline_basis(x, num_knots=3):
+    p = 100. / (num_knots + 1)
+    knots = np.array([np.percentile(x, int((k + 1) * p)) for k in range(num_knots)])
+    assert knots.min() >= x.min()
+    assert knots.max() <= x.max()
+    assert len(np.unique(knots)) == len(knots), '# of unique kernels is less than the degrees of freedom!'
+
+    df = num_knots
+    B = np.zeros([len(x), df])
+    B[:, 0] = x
+
+    def _dk(_k):
+        _i1 = x > knots[_k]
+        _i2 = x > knots[-1]
+        _x1 = np.zeros([len(x)])
+        _x2 = np.zeros([len(x)])
+
+        _x1[_i1] = x - knots[_k]
+        _x2[_i2] = x - knots[-1]
+
+        _num = (_x1**3 - _x2**3)
+        _denom = (knots[-1] - knots[_k])
+        assert abs(_denom) > 0, "denom=0, _k=%d, _i1.sum()=%d, _i2.sum()=%d" % (_k, _i1.sum(), _i2.sum())
+
+        return _num / _denom
+
+    for k in range(num_knots-2):
+        B[:, k + 1] = _dk(k) - _dk(num_knots-2)
+
+    return B

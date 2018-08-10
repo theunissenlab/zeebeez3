@@ -322,7 +322,7 @@ if __name__ == '__main__':
     exp_name = 'GreBlu9508M'
     agg_dir = '/auto/tdrive/mschachter/data/aggregate'
     preproc_dir = '/auto/tdrive/mschachter/data/%s/preprocess' % exp_name
-    decoder_dir = '/auto/tdrive/mschachter/data/%s/models' % exp_name
+    decoder_dir = '/auto/tdrive/mschachter/data/%s/decoders' % exp_name
 
     seg_uname = 'Site4_Call1_L'
     decomp = 'spike_rate'
