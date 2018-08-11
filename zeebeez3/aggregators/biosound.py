@@ -12,7 +12,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from sklearn.decomposition import PCA
 
 from zeebeez3.transforms.biosound import BiosoundTransform
-from zeebeez3.core.utils import DECODER_CALL_TYPES, CALL_TYPE_COLORS, USED_ACOUSTIC_PROPS, ACOUSTIC_FUND_PROPS
+from zeebeez3.core.utils import DECODER_CALL_TYPES, CALL_TYPE_COLORS, USED_ACOUSTIC_PROPS, ACOUSTIC_FUND_PROPS, \
+    decode_if_bytes
 
 
 class AggregateBiosounds(object):
@@ -244,7 +245,7 @@ class AggregateBiosounds(object):
         
         agg.data = dict()        
         for cname in cnames:
-            agg.data[cname] = np.array(hf[cname])
+            agg.data[decode_if_bytes(cname)] = np.array(hf[cname])
         agg.df = pd.DataFrame(agg.data)
 
         agg.acoustic_props = list(hf.attrs['acoustic_props'])

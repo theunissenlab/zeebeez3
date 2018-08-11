@@ -32,6 +32,17 @@ that zeebeez3 needs:
 Now activate that environment:
 
     source activate zeebeez3
+    
+and install zeebeez3
+
+    python setup.py install
+    
+Note that at the moment, you will have to have the latest version of soundsig installed.
+To do this, pull the latest version or clone [soundsig](https://github.com/theunissenlab/soundsig),
+and then from the soundsig directory:
+
+    source activate zeebeez3
+    python setup.py install
 
 ## Running Notebooks
 
@@ -41,5 +52,3 @@ To run the notebooks, first start jupyter notebooks from the zeebeez3 notebooks 
     jupyter notebook
     
 A web browser tab will pop up. Select the notebook that you're interested in.
-  
-

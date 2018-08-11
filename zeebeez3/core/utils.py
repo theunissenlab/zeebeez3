@@ -95,3 +95,9 @@ def clean_region(reg):
     if reg.startswith('CM'):
         return 'CM'
     return reg
+
+
+def decode_if_bytes(s):
+    if 'bytes' in str(type(s)):
+        return s.decode('utf-8')
+    return s

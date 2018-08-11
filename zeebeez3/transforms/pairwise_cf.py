@@ -17,7 +17,7 @@ from soundsig.signal import coherency
 from soundsig.timefreq import power_spectrum_jn
 
 from zeebeez3.transforms.stim_event import StimEventTransform
-from zeebeez3.core.utils import USED_ACOUSTIC_PROPS, ACOUSTIC_FUND_PROPS
+from zeebeez3.core.utils import USED_ACOUSTIC_PROPS, ACOUSTIC_FUND_PROPS, decode_if_bytes
 from zeebeez3.aggregators.biosound import AggregateBiosounds
 
 
@@ -524,7 +524,7 @@ class PairwiseCFTransform(object):
         cft.rcg_names = hf.attrs['rcg_names']
         cft.data = dict()
         for cname in col_names:
-            cft.data[cname] = np.array(hf[cname])
+            cft.data[decode_if_bytes(cname)] = np.array(hf[cname])
         hf.close()
         cft.df = pd.DataFrame(cft.data)
 

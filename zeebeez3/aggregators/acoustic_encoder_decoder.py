@@ -7,7 +7,8 @@ import pandas as pd
 from soundsig.signal import find_extrema
 from zeebeez3.aggregators.biosound import AggregateBiosounds
 from zeebeez3.models.acoustic_encoder_decoder import AcousticEncoderDecoder
-from zeebeez3.core.utils import ROSTRAL_CAUDAL_ELECTRODES_LEFT, ROSTRAL_CAUDAL_ELECTRODES_RIGHT, clean_region
+from zeebeez3.core.utils import ROSTRAL_CAUDAL_ELECTRODES_LEFT, ROSTRAL_CAUDAL_ELECTRODES_RIGHT, clean_region, \
+    decode_if_bytes
 
 
 class AcousticEncoderDecoderAggregator(object):
@@ -645,10 +646,13 @@ class AcousticEncoderDecoderAggregator(object):
 
         agg.data = dict()
         for cname in hf.attrs['col_names']:
-            agg.data[cname] = np.array(hf[cname])
+            agg.data[decode_if_bytes(cname)] = np.array([decode_if_bytes(s) for s in hf[cname]])
         agg.df = pd.DataFrame(agg.data)
 
-        agg.acoustic_props = np.array(hf['acoustic_props'])
+        aprops = list()
+        for row in hf['acoustic_props']:
+            aprops.append([decode_if_bytes(s) for s in row])
+        agg.acoustic_props = np.array(aprops)
 
         agg.encoder_weights = dict()
         agg.encoder_perfs = dict()
@@ -669,6 +673,7 @@ class AcousticEncoderDecoderAggregator(object):
         for wkey in hf.attrs['wkeys']:
             grp = hf[wkey]
 
+            wkey = decode_if_bytes(wkey)
             agg.encoder_perfs[wkey] = np.array(grp['encoder_perfs'])
             agg.encoder_weights[wkey] = np.array(grp['encoder_weights'])
             agg.encoder_features[wkey] = list(grp['encoder_features'])

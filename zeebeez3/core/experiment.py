@@ -547,10 +547,10 @@ class SegmentSpectrogram(object):
             try:
                 seg_spec[:,si:ei] = stim_spec[:, ssi:eei]
             except ValueError:
-                print 'seg_spec.shape=',seg_spec.shape
-                print 'stim_spec.shape=',stim_spec.shape
-                print 'start_time=%0.6f, end_time=%0.6f, stime=%0.6f, etime=%0.6f, si=%d, ei=%d, ssi=%d, eei=%d' % \
-                      (start_time, end_time, stime, etime, si, ei, ssi, eei)
+                print('seg_spec.shape=',seg_spec.shape)
+                print('stim_spec.shape=',stim_spec.shape)
+                print('start_time=%0.6f, end_time=%0.6f, stime=%0.6f, etime=%0.6f, si=%d, ei=%d, ssi=%d, eei=%d' % \
+                      (start_time, end_time, stime, etime, si, ei, ssi, eei))
                 raise
 
         spec_t = np.arange(seg_spec.shape[1])/self.sample_rate + start_time
@@ -560,7 +560,8 @@ class SegmentSpectrogram(object):
 if __name__ == '__main__':
 
     stim_data = stim_file_to_pandas("/tmp/tdt2neo/GreBlu9508M/stims.h5")
-    print stim_data
+    print(stim_data)
+
 
 
 

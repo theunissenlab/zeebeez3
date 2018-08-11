@@ -11,10 +11,9 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.svm import SVR
 
-from keras.layers import Dense, Activation, Dropout, ActivityRegularizer, K
+from keras.layers import Dense, Activation, Dropout, K
 from keras.models import Sequential
-from keras.regularizers import l2
-
+from keras.regularizers import l2, Regularizer
 
 
 class Decoder(object):
@@ -471,10 +470,10 @@ class LinearModel(object):
         return self.rr.coef_
 
 
-class CovarianceActivityRegularizer(ActivityRegularizer):
+class CovarianceActivityRegularizer(Regularizer):
 
     def __init__(self, C=1.0):
-        ActivityRegularizer.__init__(self)
+        Regularizer.__init__(self)
         self.C = K.cast_to_floatx(C)
         self.uses_learning_phase = True
 
