@@ -2,8 +2,6 @@ from copy import deepcopy
 import operator
 
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 from sklearn.cross_validation import KFold
 from sklearn.linear_model import Ridge
 
@@ -18,6 +16,7 @@ class StagewiseSplineRidgeRegression(object):
         pass
 
     def fit(self, X, y, baseline_features=list(), cv_indices=None, num_hyperparams=50, verbose=True, feature_names=None):
+        # Stepwise forward regression using all baseline_features and then adding additional features one at the time
         nsamps,nfeatures = X.shape
         assert len(y) == nsamps
 
@@ -37,7 +36,7 @@ class StagewiseSplineRidgeRegression(object):
         else:
             Xsub = X[:, best_features]
         Xsub = self.spline_basis(Xsub)
-        m_baseline = self.cv_fit(Xsub, y, cv_indices, num_hyperparams)
+        m_baseline = self.cv_fit(Xsub, y, cv_indices, num_hyperparams, verbose=verbose)
         best_r2 = max(m_baseline['r2'], 0)
         if verbose:
             print('Baseline model performance with %d features: R2=%0.2f' % (len(best_features), m_baseline['r2']))
@@ -46,8 +45,8 @@ class StagewiseSplineRidgeRegression(object):
         feature_improvements = [0.]*len(best_features)
         while len(features_left) > 0:
             if verbose:
-                print('Round %d of stagewise testing. Good features: %s' % (iter, ','.join([feature_names[k] for k in best_features])))
-                print('\tFeatures left: %s' % ','.join([feature_names[k] for k in features_left]))
+                print('Round %d of stagewise testing. Good features: %s' % (iter, ','.join([feature_names[k].decode('UTF-8') for k in best_features])))
+                print('\tFeatures left: %s' % ','.join([feature_names[k].decode('UTF-8') for k in features_left]))
             best_feature = None
             best_feature_r2 = best_r2
 
@@ -57,7 +56,7 @@ class StagewiseSplineRidgeRegression(object):
                 fi.append(k)
                 Xsub = X[:, fi]
                 Xsp = self.spline_basis(Xsub)
-                m_feature = self.cv_fit(Xsp, y, cv_indices, num_hyperparams)
+                m_feature = self.cv_fit(Xsp, y, cv_indices, num_hyperparams, verbose=verbose)
                 if m_feature['r2'] <= best_feature_r2:
                     if verbose:
                         print('\tFeature %s is a bad feature. best_feature_r2=%0.2f, incremental_r2=%0.2f' % (feature_names[k], best_feature_r2, m_feature['r2']))
@@ -85,15 +84,99 @@ class StagewiseSplineRidgeRegression(object):
         Xsp = self.spline_basis(Xsub)
         m_final = self.cv_fit(Xsp, y, cv_indices, num_hyperparams)
         if verbose:
-            print('Final model features: R2=%0.2f, features=%s' % (m_final['r2'], ','.join([feature_names[k] for k in best_features])))
+            print('Final model features: R2=%0.2f, features=%s' % (m_final['r2'], ','.join([feature_names[k].decode('UTF-8') for k in best_features])))
         m_final['features'] = best_features
         m_final['feature_improvements'] = np.array(feature_improvements)
 
         return m_final
+    
+    def fit_added_value(self, X, y, baseline_features=list(), cv_indices=None, num_hyperparams=50, verbose=True, feature_names=None):
+        # Fits baseline features and then single features on residual to get added value plots
+        nsamps,nfeatures = X.shape
+        assert len(y) == nsamps
+
+        if cv_indices is None:
+            cv_indices = list(KFold(nsamps, n_folds=10))
+
+        if feature_names is None:
+            feature_names = ['%d' % k for k in range(nfeatures)]
+
+        all_features = list(range(nfeatures))
+        features_left = list(np.setdiff1d(all_features, baseline_features))
+
+        # run the baseline model
+        if len(baseline_features) == 0:
+            m_baseline = {'r2': 0, 'W': 0, 'b': 0, 'alpha': 0}
+            yhat = np.zeros(y.shape)
+        else:
+            Xsub = X[:, baseline_features]
+            Xsub = self.spline_basis(Xsub)
+            m_baseline = self.cv_fit(Xsub, y, cv_indices, num_hyperparams, verbose=verbose)
+            yhat = np.dot(Xsub, m_baseline['W']) + m_baseline['b']
+            
+        m_baseline['name'] = 'baseline'
+        m_baseline['features'] = baseline_features
+        m_baseline['predict'] = yhat
+        
+        if verbose:
+            print('Baseline model performance with %d features: R2=%0.2f +- %0.3f' % (len(baseline_features), m_baseline['r2'], m_baseline['r2_std']))
+ 
+        # Keep residual if r2 significant
+        if ( m_baseline['r2'] > 2.0*m_baseline['r2_std'] ):
+            yres = y - yhat
+        else:
+            yres = y
+        
+        # Test the additional performance one feature at the time.
+        m_features = list()
+        m_Xs = list()
+        for k in features_left:
+
+            Xadd = X[:, k]
+          
+            # Find residual ffor X
+            if len(baseline_features) == 0:
+                Xres = Xadd
+                m_X = {'r2': 0, 'W': 0, 'b': 0, 'alpha': 0}
+                Xhat = np.zeros(Xadd.shape)
+            else:
+                m_X = self.cv_fit(Xsub, Xadd, cv_indices, num_hyperparams, verbose=verbose)
+                Xhat = np.dot(Xsub, m_X['W']) + m_X['b']
+            
+            if verbose:
+                print('Baseline predicting %d: R2=%0.2f +- %0.3f' % (k, m_X['r2'], m_X['r2_std']))
+
+            if (m_X['r2'] > 2.0*m_X['r2_std']) :
+                Xres = Xadd - Xhat
+            else:
+                Xres = Xadd
+            m_X['name'] = 'feature %d' % k
+            m_X['features'] = baseline_features
+            m_X['predict'] = Xhat
+            m_Xs.append(m_X)
+                     
+            Xsp = self.spline_basis(Xres) 
+            m_feature = self.cv_fit(Xsp, yres, cv_indices, num_hyperparams, verbose=verbose)
+            yhat = np.dot(Xsp, m_feature['W']) + m_feature['b']
+            
+            m_feature['name'] = 'added value'
+            m_feature['features'] = k
+            m_feature['predict'] = yhat
+            m_features.append(m_feature)
+
+        # Return a list of model outputs
+
+        return m_baseline, m_X, m_features
+
 
     def spline_basis(self, X):
 
-        nfeatures = X.shape[1]
+        if (len(X.shape) == 1):
+            nfeatures = 1
+            X = X.reshape((X.shape[0],1))
+        else:
+            nfeatures = X.shape[1]
+            
         dof = 6
         Xsp = np.zeros([X.shape[0], nfeatures*dof])
 
@@ -104,7 +187,7 @@ class StagewiseSplineRidgeRegression(object):
 
         return Xsp
 
-    def cv_fit(self, X, y, cv_indices, num_hyperparams):
+    def cv_fit(self, X, y, cv_indices, num_hyperparams, verbose=False):
 
         hparams = list(np.logspace(-2, 6, num_hyperparams))
         hparams.insert(0, 0)
@@ -121,7 +204,8 @@ class StagewiseSplineRidgeRegression(object):
                 Xtest = X[test_i, :]
                 ytest = y[test_i]
 
-                rr = Ridge(alpha=alpha)
+# FET: I use the normalization in sklearn for numerical reasons but keeps X values with regular units
+                rr = Ridge(alpha=alpha, fit_intercept=True, normalize=True, solver='svd')
                 rr.fit(Xtrain, ytrain)
 
                 ypred = rr.predict(Xtest)
@@ -133,13 +217,16 @@ class StagewiseSplineRidgeRegression(object):
                 model_perfs.append({'r2':r2, 'W':rr.coef_, 'b':rr.intercept_})
 
             mean_r2 = np.mean([d['r2'] for d in model_perfs])
+            std_r2 = np.std([d['r2'] for d in model_perfs], ddof=1)
             mean_W = np.mean([d['W'] for d in model_perfs], axis=0)
             mean_b = np.mean([d['b'] for d in model_perfs])
 
-            fold_perfs.append({'r2':mean_r2, 'W':mean_W, 'b':mean_b})
+            fold_perfs.append({'r2':mean_r2, 'r2_std': std_r2, 'W':mean_W, 'b':mean_b, 'alpha':alpha})
 
         fold_perfs.sort(key=operator.itemgetter('r2'), reverse=True)
         best_model = fold_perfs[0]
+        if verbose:
+            print('cv_fit: Best model found for alpha %f' % best_model['alpha'])
 
         return best_model
 

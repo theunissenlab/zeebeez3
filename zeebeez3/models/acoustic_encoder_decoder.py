@@ -5,8 +5,6 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy.interpolate import interp1d
-
 from soundsig.basis import cubic_spline_basis
 from soundsig.plots import compute_mean_from_scatter
 
@@ -48,6 +46,8 @@ class AcousticEncoderDecoder(Decoder):
         nfeatures_stim = self.S.shape[1]
 
         assert self.Y.shape[0] == nsamps
+        
+        # This method does not exist?
         self.zscore_neural_data()
 
         self.good_encoders = list()
@@ -56,13 +56,16 @@ class AcousticEncoderDecoder(Decoder):
         cv_indices = list(zip(*self.bootstrap(25)))
 
         if encoder:
-            base_features = [self.integer2prop.index('maxAmp'), self.integer2prop.index('meanspect'),
-                             self.integer2prop.index('sal')]
+            base_features = [self.integer2prop.index(b'maxAmp'), self.integer2prop.index(b'meanspect'),
+                             self.integer2prop.index(b'sal')]
 
+            # Z-score the acoustic features
+            S = self.preprocess_acoustic_features(acoustic_props=encoder_acoustic_props)
+            
             # run an encoder for each neural feature, which could be the spike rate of a neuron or the LFP power
             # at a given frequency
             for k in range(nfeatures_neural):
-                S = self.preprocess_acoustic_features(k, acoustic_props=encoder_acoustic_props)
+
                 y = deepcopy(self.X[:, k])
 
                 if zscore_response:
@@ -80,7 +83,7 @@ class AcousticEncoderDecoder(Decoder):
                 if edict is None:
                     print('\tFeature %d is not predictable!' % k)
                 else:
-                    bf = [self.integer2prop[f] for f in edict['features']]
+                    bf = [self.integer2prop[f].decode('UTF-8') for f in edict['features']]
                     print('\tFeature %d: best_props=%s, R2=%0.2f' % (k, ','.join(bf), edict['r2']))
                     self.good_encoders.append((k, edict))
 
@@ -88,8 +91,9 @@ class AcousticEncoderDecoder(Decoder):
             # run a PARD decoder, the power across electrodes and frequency bands
             # is used to predict acoustic features
 
+            S = self.preprocess_acoustic_features()
             for k in range(nfeatures_stim):
-                S = self.preprocess_acoustic_features(-1)
+
                 y = S[:, k]
 
                 print('Training neural->acoustic decoder on acoustic feature %s' % self.integer2prop[k])
@@ -105,7 +109,7 @@ class AcousticEncoderDecoder(Decoder):
                     print('\tFinal encoder performance: %0.2f' % ddict['r2'])
                     self.good_decoders.append((k, ddict))
 
-    def preprocess_acoustic_features(self, neural_feature_index, acoustic_props=None):
+    def preprocess_acoustic_features(self, acoustic_props=None):
         if acoustic_props is None:
             acoustic_props = self.integer2prop
 
@@ -160,7 +164,8 @@ class AcousticEncoderDecoder(Decoder):
             y /= y.std(ddof=1)
 
             # compute the tuning curve for each neuron
-            S = self.preprocess_acoustic_features(neural_feature_index, acoustic_props=acoustic_feature_names)
+            # z-score acoustic features
+            S = self.preprocess_acoustic_features(acoustic_props=acoustic_feature_names)
             assert S.shape[1] == len(acoustic_feature_indices)
             for j, acoustic_feature_index in enumerate(acoustic_feature_indices):
                 si = j * 6
@@ -215,7 +220,7 @@ class AcousticEncoderDecoder(Decoder):
             y /= y.std(ddof=1)
 
             # compute the tuning curve for each neuron
-            S = self.preprocess_acoustic_features(neural_feature_index, acoustic_props=acoustic_feature_names)
+            S = self.preprocess_acoustic_features(acoustic_props=acoustic_feature_names)
             for j, acoustic_feature_index in enumerate(acoustic_feature_indices):
                 si = j * 6
                 ei = si + 6

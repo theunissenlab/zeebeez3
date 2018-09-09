@@ -99,11 +99,11 @@ class Decoder(object):
         adults = list()
         for e,cpe in list(calls_per_emitter.items()):
             # skip "unknown" birds
-            if e == self.integer2bird.index('unknown'):
+            if e == self.integer2bird.index(b'unknown'):
                 continue
 
-            lt_i = self.integer2type.index('LT')  # only juveniles emit long tonal calls
-            beg_i = self.integer2type.index('Be')  # only juveniles emit begging calls
+            lt_i = self.integer2type.index(b'LT')  # only juveniles emit long tonal calls
+            beg_i = self.integer2type.index(b'Be')  # only juveniles emit begging calls
             jcall_sum = cpe[lt_i] + cpe[beg_i]
             if jcall_sum > 0:
                 juveniles.append(e)
@@ -145,7 +145,7 @@ class Decoder(object):
 
             # determine if holdout set contains at least one example of each type, excluding song
             for st in np.unique(stim_types):
-                if st == self.integer2type.index('song'):
+                if st == self.integer2type.index(b'song'):
                     continue
 
                 tc = 0
@@ -165,7 +165,7 @@ class Decoder(object):
             training_set = list()
             # add the stim indices for the holdout birds
             for e in holdout_emitters:
-                assert self.integer2bird[e] != 'unknown', "Something went wrong, unknown birds in holdout set!"
+                assert self.integer2bird[e] != b'unknown', "Something went wrong, unknown birds in holdout set!"
                 i = stim_emitters == e
                 ii = np.where(i)[0]
                 holdout_set.extend(ii)
@@ -174,7 +174,7 @@ class Decoder(object):
             training_emitters = np.setdiff1d(np.unique(stim_emitters), holdout_emitters)
             for e in training_emitters:
                 assert e not in holdout_emitters, "Something went wrong, holdout birds in training set!"
-                if self.integer2bird[e] == 'unknown':
+                if self.integer2bird[e] == b'unknown':
                     continue
 
                 i = stim_emitters == e
@@ -182,7 +182,7 @@ class Decoder(object):
                 training_set.extend(ii)
 
             # now randomly hold out 25% of songs from "unknown" emitter
-            i = stim_emitters == self.integer2bird.index('unknown')
+            i = stim_emitters == self.integer2bird.index(b'unknown')
             ii = np.where(i)[0]
             np.random.shuffle(ii)
             ntest = int(0.25*len(ii))
