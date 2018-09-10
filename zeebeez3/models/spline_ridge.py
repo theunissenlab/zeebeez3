@@ -32,14 +32,15 @@ class StagewiseSplineRidgeRegression(object):
 
         # run the baseline model
         if len(best_features) == 0:
-            Xsub = np.zeros(nsamps)
+            best_r2 = 0.0
         else:
             Xsub = X[:, best_features]
-        Xsub = self.spline_basis(Xsub)
-        m_baseline = self.cv_fit(Xsub, y, cv_indices, num_hyperparams, verbose=verbose)
-        best_r2 = max(m_baseline['r2'], 0)
+            Xsub = self.spline_basis(Xsub)
+            m_baseline = self.cv_fit(Xsub, y, cv_indices, num_hyperparams, verbose=verbose)
+            best_r2 = max(m_baseline['r2'], 0)
+        
         if verbose:
-            print('Baseline model performance with %d features: R2=%0.2f' % (len(best_features), m_baseline['r2']))
+            print('Baseline model performance with %d features: R2=%0.2f' % (len(best_features), best_r2))
 
         iter = 0
         feature_improvements = [0.]*len(best_features)
@@ -84,14 +85,14 @@ class StagewiseSplineRidgeRegression(object):
         Xsp = self.spline_basis(Xsub)
         m_final = self.cv_fit(Xsp, y, cv_indices, num_hyperparams)
         if verbose:
-            print('Final model features: R2=%0.2f, features=%s' % (m_final['r2'], ','.join([feature_names[k].decode('UTF-8') for k in best_features])))
+            print('Final model features: R2=%0.2f+-%.3f, features=%s' % (m_final['r2'], m_final['r2_std'], ','.join([feature_names[k].decode('UTF-8') for k in best_features])))
         m_final['features'] = best_features
         m_final['feature_improvements'] = np.array(feature_improvements)
 
         return m_final
     
     def fit_added_value(self, X, y, baseline_features=list(), cv_indices=None, num_hyperparams=50, verbose=True, feature_names=None):
-        # Fits baseline features and then single features on residual to get added value plots
+        # Fits baseline features and then other features on residual to get added value plots
         nsamps,nfeatures = X.shape
         assert len(y) == nsamps
 
@@ -103,10 +104,14 @@ class StagewiseSplineRidgeRegression(object):
 
         all_features = list(range(nfeatures))
         features_left = list(np.setdiff1d(all_features, baseline_features))
+        
+        feature_names_baseline = [feature_names[k] for k in baseline_features]
+        feature_names_added = [feature_names[k] for k in features_left]
+        
 
         # run the baseline model
         if len(baseline_features) == 0:
-            m_baseline = {'r2': 0, 'W': 0, 'b': 0, 'alpha': 0}
+            m_baseline = {'r2': 0, 'r2_std':0, 'W': 0, 'b': 0, 'alpha': 0}
             yhat = np.zeros(y.shape)
         else:
             Xsub = X[:, baseline_features]
@@ -114,8 +119,8 @@ class StagewiseSplineRidgeRegression(object):
             m_baseline = self.cv_fit(Xsub, y, cv_indices, num_hyperparams, verbose=verbose)
             yhat = np.dot(Xsub, m_baseline['W']) + m_baseline['b']
             
-        m_baseline['name'] = 'baseline'
-        m_baseline['features'] = baseline_features
+        m_baseline['name'] = 'Baseline'
+        m_baseline['features'] = feature_names_baseline
         m_baseline['predict'] = yhat
         
         if verbose:
@@ -128,15 +133,17 @@ class StagewiseSplineRidgeRegression(object):
             yres = y
         
         # Test the additional performance one feature at the time.
-        m_features = list()
+        
+        # First predict features from all the other features
         m_Xs = list()
-        for k in features_left:
+        Xres = np.zeros((nsamps, len(features_left)))       
+        for ik, k in enumerate(features_left):
 
             Xadd = X[:, k]
           
             # Find residual ffor X
             if len(baseline_features) == 0:
-                Xres = Xadd
+                Xres[:,ik] = Xadd
                 m_X = {'r2': 0, 'W': 0, 'b': 0, 'alpha': 0}
                 Xhat = np.zeros(Xadd.shape)
             else:
@@ -147,26 +154,81 @@ class StagewiseSplineRidgeRegression(object):
                 print('Baseline predicting %d: R2=%0.2f +- %0.3f' % (k, m_X['r2'], m_X['r2_std']))
 
             if (m_X['r2'] > 2.0*m_X['r2_std']) :
-                Xres = Xadd - Xhat
+                Xres[:, ik] = Xadd - Xhat
             else:
-                Xres = Xadd
-            m_X['name'] = 'feature %d' % k
-            m_X['features'] = baseline_features
+                Xres[:, ik] = Xadd
+            m_X['name'] = 'Feature %d' % k
+            m_X['features'] = feature_names_baseline
             m_X['predict'] = Xhat
             m_Xs.append(m_X)
-                     
-            Xsp = self.spline_basis(Xres) 
-            m_feature = self.cv_fit(Xsp, yres, cv_indices, num_hyperparams, verbose=verbose)
-            yhat = np.dot(Xsp, m_feature['W']) + m_feature['b']
+        
+        # Now predict featuers left.             
+        Xsp = self.spline_basis(Xres) 
+        m_feature = self.cv_fit(Xsp, yres, cv_indices, num_hyperparams, verbose=verbose)
+        yhat = np.dot(Xsp, m_feature['W']) + m_feature['b']
             
-            m_feature['name'] = 'added value'
-            m_feature['features'] = k
-            m_feature['predict'] = yhat
-            m_features.append(m_feature)
+        m_feature['name'] = 'Added'
+        m_feature['features'] = feature_names_added
+        m_feature['predict'] = yhat
 
-        # Return a list of model outputs
 
-        return m_baseline, m_X, m_features
+        # Return model outputs
+        return m_baseline, m_Xs, m_feature
+
+    def fit_nested(self, X, y, del_features=list(), cv_indices=None, num_hyperparams=50, verbose=True, feature_names=None):
+        # Fits baseline features and then single features on residual to get added value plots
+        nsamps,nfeatures = X.shape
+        assert len(y) == nsamps
+
+        if cv_indices is None:
+            cv_indices = list(KFold(nsamps, n_folds=10))
+
+        if feature_names is None:
+            feature_names = ['%d' % k for k in range(nfeatures)]
+            
+        feature_names_left = []
+
+        all_features = list(range(nfeatures))
+        features_left = list(np.setdiff1d(all_features, del_features))
+        feature_names_left = [feature_names[k] for k in features_left]
+
+        # run the full model
+        if len(all_features) == 0:
+            m_full = {  'name': 'Full',   'r2': 0, 'r2_std': 0, 'W': 0, 'b': 0, 'alpha': 0, 'features': feature_names, 'predict': np.zeros(y.shape)}
+            m_nested = {'name': 'Nested', 'r2': 0, 'r2_std': 0, 'W': 0, 'b': 0, 'alpha': 0, 'features': feature_names, 'predict': np.zeros(y.shape)}
+        else:
+            Xsub = self.spline_basis(X)
+            m_full = self.cv_fit(Xsub, y, cv_indices, num_hyperparams, verbose=verbose)
+            yhat = np.dot(Xsub, m_full['W']) + m_full['b']
+            m_full['name'] = 'Full'
+            m_full['features'] = feature_names
+            m_full['predict'] = yhat
+            
+            if len(features_left) == 0:
+                m_nested = {'name': 'Nested', 'r2': 0, 'r2_std': 0, 'W': 0, 'b': 0, 'alpha': 0, 'features':feature_names_left, 'predict': np.zeros(y.shape)}
+            else:
+                Xsub = X[:, features_left]
+                Xsub = self.spline_basis(Xsub)
+                m_nested = self.cv_fit(Xsub, y, cv_indices, num_hyperparams, verbose=verbose)
+                yhat = np.dot(Xsub, m_nested['W']) + m_nested['b']
+                m_nested['name'] = 'Nested'
+                m_nested['features'] = feature_names_left
+                m_nested['predict'] = yhat
+                            
+        # Return fit results from both models
+        if verbose:
+            print('Full model:', feature_names)
+            print('\tR2 = %.2f +- %.3f' % (m_full['r2'], m_full['r2_std']))
+            print('Nested model:', feature_names_left)
+            print('\tR2 = %.2f +- %.3f' % (m_nested['r2'], m_nested['r2_std']))
+            stdcomp = np.sqrt((m_full['r2_std']**2 + m_nested['r2_std']**2)/2)
+            if ((m_full['r2'] - m_nested['r2_std']) > 2.0*stdcomp):
+                print('Significant Diff')
+            else:
+                print('NOT Significant Diff')
+            
+        return m_full, m_nested
+                
 
 
     def spline_basis(self, X):
