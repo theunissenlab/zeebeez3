@@ -170,8 +170,13 @@ class StagewiseSplineRidgeRegression(object):
         m_feature['name'] = 'Added'
         m_feature['features'] = feature_names_added
         m_feature['predict'] = yhat
-
-
+        
+        if verbose:
+            if ( m_feature['r2'] > 2.0*m_feature['r2_std'] ):
+                print('Significant Added Value for %s: R2 = %.2f +- %.3f' % (features_left[0], m_feature['r2'], m_feature['r2_std']) )
+            else:
+                print('Not Significant Added Value for %s: R2 = %.2f +- %.3f' % (features_left[0], m_feature['r2'], m_feature['r2_std']) )
+                        
         # Return model outputs
         return m_baseline, m_Xs, m_feature
 
@@ -222,10 +227,10 @@ class StagewiseSplineRidgeRegression(object):
             print('Nested model:', feature_names_left)
             print('\tR2 = %.2f +- %.3f' % (m_nested['r2'], m_nested['r2_std']))
             stdcomp = np.sqrt((m_full['r2_std']**2 + m_nested['r2_std']**2)/2)
-            if ((m_full['r2'] - m_nested['r2_std']) > 2.0*stdcomp):
-                print('Significant Diff')
+            if ((m_full['r2'] - m_nested['r2']) > 2.0*stdcomp):
+                print('Significant Diff %.3f > %.3f ' % ((m_full['r2'] - m_nested['r2']),2.0*stdcomp ))
             else:
-                print('NOT Significant Diff')
+                print('NOT Significant Diff %.3f < %.3f' % ((m_full['r2'] - m_nested['r2']),2.0*stdcomp ))
             
         return m_full, m_nested
                 
