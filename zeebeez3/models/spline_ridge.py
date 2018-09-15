@@ -143,7 +143,7 @@ class StagewiseSplineRidgeRegression(object):
           
             # Find residual ffor X
             if len(baseline_features) == 0:
-                m_X = {'r2': 0, 'W': 0, 'b': 0, 'alpha': 0}
+                m_X = {'r2': 0, 'r2_std':0, 'W': 0, 'b': 0, 'alpha': 0}
                 Xhat = np.zeros(Xadd.shape)
             else:
                 m_X = self.cv_fit(Xsub, Xadd, cv_indices, num_hyperparams, verbose=verbose)
