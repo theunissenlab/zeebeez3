@@ -24,6 +24,40 @@ def get_this_dir():
 
 
 def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/mschachter/data'):
+    """ This function aggregates data for a specific stimulus presentation and returns it in a
+        dictionary.
+
+    :param bird: The name of the bird (string)
+    :param block: The block name (string)
+    :param segment: The segment name (string)
+    :param hemi: The hemisphere (string)
+    :param stim_id: The stimulus id (integer?)
+
+    :return: A dictionary with the following elements:
+
+        {
+            'stim_id': the stimulus id
+            'spec_t': a time vector for the spectrogram
+            'spec_freq': the frequency vector for the spectrogram
+            'spec': the stimulus spectrogram,
+            'lfp': the raw multielectrode LFP, for all trials, for the specified stimulus, of shape (num_trials, num_electrodes, num_time_points)
+            'spikes': a list of spike trains, each spike train is a list of spike times, the list is of shape (num_neurons, num_trials)
+            'lfp_sample_rate': the sample rate of the LFP
+            'psth': the trial-averaged PSTH for the stimulus
+            'electrode_order': The electrodes that correspond to the indices of 'lfp'
+            'cell_index2electrode': The electrode that corresponds to each cell in 'spikes'
+            'psd_freq': The frequency vector that corresponds to the LFP power spectra
+            'aprops': A list of acoustic features used
+            'syllable_props': A dictionary of properties for each syllable of the stimulus:
+                {
+                    'start_time': The start time of the syllable
+                    'end_time': The end time of the syllable
+                    'order': The order of the syllable
+                    'lfp_psd': An array of trial-averaged LFP power spectra, of shape (num_electrodes, len(psd_freq)
+                }
+        }
+
+    """
 
     bdir = os.path.join(data_dir, bird)
     tdir = os.path.join(bdir, 'transforms')
