@@ -13,6 +13,7 @@ from soundsig.spikes import plot_raster, compute_psth
 from soundsig.timefreq import wavelet_scalogram
 
 from zeebeez3.core.experiment import segment_to_unique_name
+from zeebeez3.core.utils import decode_if_bytes, decode_column_if_bytes
 
 
 class StimEventTransform(object):
@@ -786,39 +787,42 @@ class StimEventTransform(object):
         col_names = grp.attrs['col_names']
         se.trial_data = dict()
         for cname in col_names:
-            se.trial_data[cname] = np.array(grp[cname])
+            se.trial_data[decode_if_bytes(cname)] = np.array(grp[cname])
         se.trial_df = pd.DataFrame(se.trial_data)
+        decode_column_if_bytes(se.trial_df)
         
         # read the electrode data
         grp = hf['electrode_data']
         col_names = grp.attrs['col_names']
         se.electrode_data = dict()
         for cname in col_names:
-            se.electrode_data[cname] = np.array(grp[cname])
+            se.electrode_data[decode_if_bytes(cname)] = np.array(grp[cname])
         se.electrode_df = pd.DataFrame(se.electrode_data)
+        decode_column_if_bytes(se.electrode_df)
         
         # read the cell data
         grp = hf['cell_data']
         col_names = grp.attrs['col_names']
         se.cell_data = dict()
         for cname in col_names:
-            se.cell_data[cname] = np.array(grp[cname])
+            se.cell_data[decode_if_bytes(cname)] = np.array(grp[cname])
         se.cell_df = pd.DataFrame(se.cell_data)
+        decode_column_if_bytes(se.cell_df)
 
         # read representation data
         grp = hf['rep_params']
         se.lfp_rep_params = dict()
         rep_types = grp.attrs['rep_types']
         for rtype in rep_types:
-            se.lfp_rep_params[rtype] = dict()
+            se.lfp_rep_params[decode_if_bytes(rtype)] = dict()
             if rtype in grp:
                 rgrp = grp[rtype]
                 for aname,aval in list(rgrp.attrs.items()):
-                    se.lfp_rep_params[rtype][aname] = aval
+                    se.lfp_rep_params[decode_if_bytes(rtype)][decode_if_bytes(aname)] = aval
 
         # read per-stim data
         if rep_types_to_load is None:
-            rep_types_to_load = rep_types
+            rep_types_to_load = [decode_if_bytes(s) for s in rep_types]
 
         stim_ids = se.trial_df['stim_id'].unique()
         se.spec_by_stim = dict()

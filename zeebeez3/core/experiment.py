@@ -3,6 +3,7 @@ import time
 import operator
 
 import numpy as np
+from neo import NeoHdf5IO
 from pandas import DataFrame
 
 from soundsig.spikes import spike_trains_to_matrix
@@ -23,7 +24,7 @@ class Experiment(object):
         self.lfp_sample_rate = None
         self.segment_specs = None
 
-    def init_from_file(self, neo_file_name, stims_dir):
+    def init_from_file(self, neo_file_name, stim_file):
 
         self.file_name = neo_file_name
         self.stimulus_file_name = os.path.join(stims_dir, 'stims.csv')
@@ -31,9 +32,8 @@ class Experiment(object):
         assert os.path.exists(self.stimulus_file_name), "No such file: {}".format(self.stimulus_file_name)
 
         #read the neo file
-        f = NeoHdf5IO(neo_file_name, lazy=True)
-        self.blocks = f.read_all_blocks()
-        f.close()
+        with NeoHdf5IO(neo_file_name) as f:
+            self.blocks = f.read_all_blocks()
 
         #construct a sound manager and construct a DataFrame of stimulus data
         if stim_file_name is not None:

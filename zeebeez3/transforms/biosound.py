@@ -11,7 +11,7 @@ from soundsig.sound import temporal_envelope, BioSound, plot_spectrogram, log_tr
 from soundsig.timefreq import gaussian_stft
 from zeebeez3.core.experiment import Experiment
 
-from zeebeez3.core.utils import CALL_TYPE_COLORS, CALL_TYPE_SHORT_NAMES
+from zeebeez3.core.utils import CALL_TYPE_COLORS, CALL_TYPE_SHORT_NAMES, decode_if_bytes, decode_column_if_bytes
 
 
 class BiosoundTransform(object):
@@ -198,12 +198,13 @@ class BiosoundTransform(object):
     def load(clz, bs_file):
         hf = h5py.File(bs_file, 'r')
         bst = BiosoundTransform()
-        bst.bird = hf.attrs['bird']
-        col_names = hf.attrs['col_names']
+        bst.bird = decode_if_bytes(hf.attrs['bird'])
+        col_names = [decode_if_bytes(s) for s in hf.attrs['col_names']]
         bst.stim_data = dict()
         for cname in col_names:
-            bst.stim_data[cname] = np.array(hf[cname])
+            bst.stim_data[decode_if_bytes(cname)] = np.array(hf[cname])
         bst.stim_df = pd.DataFrame(bst.stim_data)
+        decode_column_if_bytes(bst.stim_df)
         hf.close()
 
         return bst

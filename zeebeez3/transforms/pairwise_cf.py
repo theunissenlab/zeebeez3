@@ -17,7 +17,7 @@ from soundsig.signal import coherency
 from soundsig.timefreq import power_spectrum_jn
 
 from zeebeez3.transforms.stim_event import StimEventTransform
-from zeebeez3.core.utils import USED_ACOUSTIC_PROPS, ACOUSTIC_FUND_PROPS, decode_if_bytes
+from zeebeez3.core.utils import USED_ACOUSTIC_PROPS, ACOUSTIC_FUND_PROPS, decode_if_bytes, decode_column_if_bytes
 from zeebeez3.aggregators.biosound import AggregateBiosounds
 
 
@@ -506,8 +506,8 @@ class PairwiseCFTransform(object):
         cft = PairwiseCFTransform()
 
         hf = h5py.File(cf_file, 'r')
-        cft.rep_type = hf.attrs['rep_type']
-        col_names = hf.attrs['col_names']
+        cft.rep_type = decode_if_bytes(hf.attrs['rep_type'])
+        col_names = [decode_if_bytes(s) for s in hf.attrs['col_names']]
         cft.lags = hf.attrs['lags']
         cft.freqs = hf.attrs['freqs']
         cft.cell_index2electrode = hf.attrs['cell_index2electrode']
@@ -519,14 +519,15 @@ class PairwiseCFTransform(object):
             cft.spike_rate = np.array(hf['SPIKE_RATE'])
             cft.spike_synchrony = np.array(hf['SPIKE_SYNC'])
 
-        cft.bird = hf.attrs['bird']
-        cft.segment_uname = hf.attrs['segment_uname']
-        cft.rcg_names = hf.attrs['rcg_names']
+        cft.bird = decode_if_bytes(hf.attrs['bird'])
+        cft.segment_uname = decode_if_bytes(hf.attrs['segment_uname'])
+        cft.rcg_names = [decode_if_bytes(s) for s in hf.attrs['rcg_names']]
         cft.data = dict()
         for cname in col_names:
             cft.data[decode_if_bytes(cname)] = np.array(hf[cname])
         hf.close()
         cft.df = pd.DataFrame(cft.data)
+        decode_column_if_bytes(cft.df)
 
         return cft
 

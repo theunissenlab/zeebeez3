@@ -1,5 +1,8 @@
 import os
 
+import numpy as np
+
+
 def get_root_dir():
     dirname, filename = os.path.split(os.path.abspath(__file__))
     return os.path.abspath(os.path.join(dirname, '..'))
@@ -101,3 +104,17 @@ def decode_if_bytes(s):
     if 'bytes' in str(type(s)):
         return s.decode('utf-8')
     return s
+
+
+def decode_column_if_bytes(df):
+    """ Decodes each column of a pandas DataFrame that is 'bytes' into a string. Runs inline. """
+    for cname in df.keys():
+        if df[cname].dtype == np.dtype('O'):
+            df[cname] = df[cname].str.decode('utf-8')
+
+
+def clamp(x, minval, maxval):
+  return max(minval, min(x, maxval))
+
+def to_hex(r, g, b):
+    "#{0:02x}{1:02x}{2:02x}".format(clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255))
