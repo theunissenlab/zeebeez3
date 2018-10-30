@@ -5,7 +5,7 @@ from copy import deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
 from soundsig.sound import spec_colormap, plot_spectrogram
-from soundsig.spikes import compute_psth
+from soundsig.spikes import compute_psth, plot_raster
 
 from zeebeez3.core.utils import USED_ACOUSTIC_PROPS, ROSTRAL_CAUDAL_ELECTRODES_LEFT, ROSTRAL_CAUDAL_ELECTRODES_RIGHT, \
     ACOUSTIC_PROP_COLORS_BY_TYPE, ACOUSTIC_PROP_NAMES, to_hex
@@ -23,7 +23,8 @@ def get_this_dir():
     return root_dir
 
 
-def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/mschachter/data'):
+def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/mschachter/data',
+                  biosound=None, stim_event=None, pairwise_cf=None):
     """ This function aggregates data for a specific stimulus presentation and returns it in a
         dictionary.
 
@@ -32,6 +33,9 @@ def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/ms
     :param segment: The segment name (string)
     :param hemi: The hemisphere (string)
     :param stim_id: The stimulus id (integer?)
+    :param biosound: Pre-loaded BiosoundTransform
+    :param stim_event: Pre-loaded StimEventTransform
+    :param pairwise_cf: Pre-loaded PairwiseCFTransform
 
     :return: A dictionary with the following elements:
 
@@ -39,9 +43,9 @@ def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/ms
             'stim_id': the stimulus id
             'spec_t': a time vector for the spectrogram
             'spec_freq': the frequency vector for the spectrogram
-            'spec': the stimulus spectrogram,
+            'spec': the log transformed stimulus spectrogram,
             'lfp': the raw multielectrode LFP, for all trials, for the specified stimulus, of shape (num_trials, num_electrodes, num_time_points)
-            'spikes': a list of spike trains, each spike train is a list of spike times, the list is of shape (num_neurons, num_trials)
+            'spikes': a list of spike trains, each spike train is a list of spike times, the list is of shape (num_trials, num_neurons)
             'lfp_sample_rate': the sample rate of the LFP
             'psth': the trial-averaged PSTH for the stimulus
             'electrode_order': The electrodes that correspond to the indices of 'lfp'
@@ -64,21 +68,24 @@ def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/ms
 
     aprops = USED_ACOUSTIC_PROPS
 
-    # load the BioSound
-    bs_file = os.path.join(tdir, 'BiosoundTransform_%s.h5' % bird)
-    bs = BiosoundTransform.load(bs_file)
+    if biosound is None:
+        # load the BioSound
+        bs_file = os.path.join(tdir, 'BiosoundTransform_%s.h5' % bird)
+        biosound = BiosoundTransform.load(bs_file)
 
-    # load the StimEvent transform
-    se_file = os.path.join(tdir, 'StimEvent_%s_%s_%s_%s.h5' % (bird,block,segment,hemi))
-    print('Loading %s...' % se_file)
-    se = StimEventTransform.load(se_file, rep_types_to_load=['raw'])
-    se.zscore('raw')
-    se.segment_stims_from_biosound(bs_file)
+    if stim_event is None:
+        # load the StimEvent transform
+        se_file = os.path.join(tdir, 'StimEvent_%s_%s_%s_%s.h5' % (bird,block,segment,hemi))
+        print('Loading %s...' % se_file)
+        stim_event = StimEventTransform.load(se_file, rep_types_to_load=['raw'])
+        stim_event.zscore('raw')
+        stim_event.segment_stims_from_biosound(bs_file)
 
-    # load the pairwise CF transform
-    pcf_file = os.path.join(tdir, 'PairwiseCF_%s_%s_%s_%s_raw.h5' % (bird,block,segment,hemi))
-    print('Loading %s...' % pcf_file)
-    pcf = PairwiseCFTransform.load(pcf_file)
+    if pairwise_cf is None:
+        # load the pairwise CF transform
+        pcf_file = os.path.join(tdir, 'PairwiseCF_%s_%s_%s_%s_raw.h5' % (bird,block,segment,hemi))
+        print('Loading %s...' % pcf_file)
+        pairwise_cf = PairwiseCFTransform.load(pcf_file)
 
     def log_transform(x, dbnoise=100.):
         x /= x.max()
@@ -87,7 +94,7 @@ def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/ms
         x[x < 0] = 0
         x /= x.max()
 
-    all_lfp_psds = deepcopy(pcf.psds)
+    all_lfp_psds = deepcopy(pairwise_cf.psds)
     log_transform(all_lfp_psds)
     all_lfp_psds -= all_lfp_psds.mean(axis=0)
     all_lfp_psds /= all_lfp_psds.std(axis=0, ddof=1)
@@ -95,36 +102,37 @@ def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/ms
     # get overall biosound stats
     bs_stats = dict()
     for aprop in aprops:
-        amean = bs.stim_df[aprop].mean()
-        astd = bs.stim_df[aprop].std(ddof=1)
+        amean = biosound.stim_df[aprop].mean()
+        astd = biosound.stim_df[aprop].std(ddof=1)
         bs_stats[aprop] = (amean, astd)
 
-    for (stim_id2,stim_type2),gdf in se.segment_df.groupby(['stim_id', 'stim_type']):
+    for (stim_id2,stim_type2),gdf in stim_event.segment_df.groupby(['stim_id', 'stim_type']):
         print('%d: %s' % (stim_id2, stim_type2))
 
     # get the spectrogram
-    i = se.segment_df.stim_id == stim_id
-    last_end_time = se.segment_df.end_time[i].max()
+    i = stim_event.segment_df.stim_id == stim_id
+    last_end_time = stim_event.segment_df.end_time[i].max()
+    print('last_end_time=',last_end_time)
 
-    spec_freq = se.spec_freq
-    stim_spec = se.spec_by_stim[stim_id]
-    spec_t = np.arange(stim_spec.shape[1]) / se.lfp_sample_rate
-    speci = np.min(np.where(spec_t > last_end_time)[0])
+    spec_freq = stim_event.spec_freq
+    stim_spec = stim_event.spec_by_stim[stim_id]
+    spec_t = np.arange(stim_spec.shape[1]) / stim_event.lfp_sample_rate
+    speci = np.max(np.where(spec_t <= last_end_time)[0])
     spec_t = spec_t[:speci]
     stim_spec = stim_spec[:, :speci]
     stim_dur = spec_t.max() - spec_t.min()
 
     # get the raw LFP
-    si = int(se.pre_stim_time*se.lfp_sample_rate)
-    ei = int(stim_dur*se.lfp_sample_rate) + si
-    lfp = se.lfp_reps_by_stim['raw'][stim_id][:, :, si:ei]
+    si = int(stim_event.pre_stim_time*stim_event.lfp_sample_rate)
+    ei = int(stim_dur*stim_event.lfp_sample_rate) + si
+    lfp = stim_event.lfp_reps_by_stim['raw'][stim_id][:, :, si:ei]
     ntrials,nelectrodes,nt = lfp.shape
 
     # get the raw spikes, spike_mat is ragged array of shape (num_trials, num_cells, num_spikes)
-    spike_mat = se.spikes_by_stim[stim_id]
+    spike_mat = stim_event.spikes_by_stim[stim_id]
     assert ntrials == len(spike_mat)
 
-    ncells = len(se.cell_df)
+    ncells = len(stim_event.cell_df)
     print('ncells=%d' % ncells)
     ntrials = len(spike_mat)
 
@@ -134,7 +142,7 @@ def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/ms
         # get the spikes across all trials for neuron n
         spikes = [spike_mat[k][n] for k in range(ntrials)]
         # make a PSTH
-        _psth_t,_psth = compute_psth(spikes, stim_dur, bin_size=1.0/se.lfp_sample_rate)
+        _psth_t,_psth = compute_psth(spikes, stim_dur, bin_size=1.0/stim_event.lfp_sample_rate)
         psth.append(_psth)
     psth = np.array(psth)
 
@@ -146,40 +154,40 @@ def get_full_data(bird, block, segment, hemi, stim_id, data_dir='/auto/tdrive/ms
     # get acoustic props and LFP/spike power spectra for each syllable
     syllable_props = list()
 
-    i = bs.stim_df.stim_id == stim_id
-    orders = sorted(bs.stim_df.order[i].values)
+    i = biosound.stim_df.stim_id == stim_id
+    orders = sorted(biosound.stim_df.order[i].values)
     cell_index2electrode = None
     for o in orders:
-        i = (bs.stim_df.stim_id == stim_id) & (bs.stim_df.order == o)
+        i = (biosound.stim_df.stim_id == stim_id) & (biosound.stim_df.order == o)
         assert i.sum() == 1
 
         d = dict()
-        d['start_time'] = bs.stim_df.start_time[i].values[0]
-        d['end_time'] = bs.stim_df.end_time[i].values[0]
+        d['start_time'] = biosound.stim_df.start_time[i].values[0]
+        d['end_time'] = biosound.stim_df.end_time[i].values[0]
         d['order'] = o
 
         for aprop in aprops:
             amean,astd = bs_stats[aprop]
-            d[aprop] = (bs.stim_df[aprop][i].values[0] - amean) / astd
+            d[aprop] = (biosound.stim_df[aprop][i].values[0] - amean) / astd
 
         # get the LFP power spectra
         lfp_psd = list()
         for k,e in enumerate(electrode_order):
-            i = (pcf.df.stim_id == stim_id) & (pcf.df.order == o) & (pcf.df.decomp == 'full') & \
-                (pcf.df.electrode1 == e) & (pcf.df.electrode2 == e)
+            i = (pairwise_cf.df.stim_id == stim_id) & (pairwise_cf.df.order == o) & (pairwise_cf.df.decomp == 'full') & \
+                (pairwise_cf.df.electrode1 == e) & (pairwise_cf.df.electrode2 == e)
 
             assert i.sum() == 1, "i.sum()=%d, stim_id=%s, order=%s, electrode1=%d, electrode2=%d" % \
                                  (i.sum(), stim_id, o, e, e)
 
-            index = pcf.df[i]['index'].values[0]
+            index = pairwise_cf.df[i]['index'].values[0]
             lfp_psd.append(all_lfp_psds[index, :])
         d['lfp_psd'] = np.array(lfp_psd)
 
         syllable_props.append(d)
 
     return {'stim_id':stim_id, 'spec_t':spec_t, 'spec_freq':spec_freq, 'spec':stim_spec,
-            'lfp':lfp, 'spikes':spike_mat, 'lfp_sample_rate':se.lfp_sample_rate, 'psth':psth,
-            'syllable_props':syllable_props, 'electrode_order':electrode_order, 'psd_freq':pcf.freqs,
+            'lfp':lfp, 'spikes':spike_mat, 'lfp_sample_rate':stim_event.lfp_sample_rate, 'psth':psth,
+            'syllable_props':syllable_props, 'electrode_order':electrode_order, 'psd_freq':pairwise_cf.freqs,
             'cell_index2electrode':cell_index2electrode, 'aprops':aprops}
 
 
@@ -204,7 +212,8 @@ def plot_full_data(d, syllable_index):
     ax = plt.subplot(gs[:top_height+1, :left_width])
     spec = d['spec']
     spec[spec < np.percentile(spec, 15)] = 0
-    plot_spectrogram(d['spec_t'], d['spec_freq']*1e-3, spec, ax=ax, colormap='SpectroColorMap', colorbar=False, ticks=True)
+    plot_spectrogram(d['spec_t'], d['spec_freq']*1e-3, spec, ax=ax, colormap='SpectroColorMap', colorbar=False,
+                     ticks=True, log=False, dBNoise=None)
     plt.axvline(syllable_start, c='k', linestyle='--', linewidth=3.0, alpha=0.7)
     plt.axvline(syllable_end, c='k', linestyle='--', linewidth=3.0, alpha=0.7)
     plt.ylabel('Frequency (kHz)')
@@ -299,13 +308,131 @@ def plot_full_data(d, syllable_index):
     plt.show()
 
 
+def plot_single_trial_data(d, syllable_index, trial_index):
+
+    syllable_start = d['syllable_props'][syllable_index]['start_time'] - 0.030
+    syllable_end = d['syllable_props'][syllable_index]['end_time'] + 0.030
+
+    # set the figure width proportional to the length of the syllable for uniformity across stimuli
+    max_fig_width = 12.0
+    max_stim_duration = 2.5
+
+    fig_width = ((syllable_end - syllable_start) / max_stim_duration) * max_fig_width
+
+    figsize = (fig_width, 10)
+    fig = plt.figure(figsize=figsize, facecolor='w')
+    fig.subplots_adjust(top=0.95, bottom=0.02, right=0.97, left=0.03, hspace=0.20, wspace=0.20)
+
+    gs = plt.GridSpec(100, 1)
+
+    # plot the biosound features
+    ax = plt.subplot(gs[:10])
+    sprops = d['syllable_props'][syllable_index]
+    aprops = USED_ACOUSTIC_PROPS
+
+    vals = [sprops[a] for a in aprops]
+    plt.axhline(0, c='k')
+    for k, (aprop, v) in enumerate(zip(aprops, vals)):
+        bx = k
+        rgb = np.array(ACOUSTIC_PROP_COLORS_BY_TYPE[aprop]).astype('int')
+        clr_hex = to_hex(*rgb)
+        plt.bar(bx, v, color=clr_hex, alpha=0.7)
+    ax.xaxis.tick_top()
+    # plt.xticks(range(len(aprops)), aprops, rotation=45, fontsize=6)
+    plt.xticks([])
+
+    # plot the spectrogram
+    ax = plt.subplot(gs[15:40])
+    spec = d['spec']
+    spec[spec < np.percentile(spec, 15)] = 0
+
+    # the spectogram is already log transformed, make sure log=False and dBNoise=None
+    plot_spectrogram(d['spec_t'], d['spec_freq'] * 1e-3, spec, ax=ax, colormap='SpectroColorMap',
+                                       ticks=False, log=False, dBNoise=None, colorbar=False)
+
+    plt.xlim(syllable_start, syllable_end)
+
+    # plot the raw LFP
+    ax = plt.subplot(gs[45:70])
+
+    sr = d['lfp_sample_rate']
+    raw_lfp = d['lfp'][trial_index, :, :]
+    lfp_t = np.arange(raw_lfp.shape[1]) / sr
+    nelectrodes, nt = raw_lfp.shape
+    lfp_i = (lfp_t >= syllable_start) & (lfp_t <= syllable_end)
+
+    voffset = 5
+    for n in range(nelectrodes):
+        plt.plot(lfp_t[lfp_i], raw_lfp[nelectrodes - n - 1, :][lfp_i] + voffset * n, 'k-', linewidth=2.0, alpha=0.75)
+    plt.axis('tight')
+    ytick_locs = np.arange(nelectrodes) * voffset
+    plt.yticks(ytick_locs, list(reversed(d['electrode_order'])))
+    plt.xticks([])
+
+    # plot the spike train raster
+    ax = plt.subplot(gs[75:])
+
+    spike_mat = d['spikes'] # list-of-lists with shape (num_trials, num_neurons)
+    print('# of neurons: ',len(spike_mat))
+    raw_spikes = list()
+    for spike_train in spike_mat[trial_index]:
+        i = (spike_train >= syllable_start) & (spike_train <= syllable_end)
+        raw_spikes.append(spike_train[i] - syllable_start)
+    plt.xticks([])
+
+    plot_raster(raw_spikes, ax=ax, duration=syllable_end-syllable_start,
+                bin_size=0.001, time_offset=0.0, ylabel='', groups=None,
+                bgcolor=None, spike_color='k')
+    plt.xticks([])
+
+
 def draw_figures():
 
-    d = get_full_data('GreBlu9508M', 'Site1', 'Call1', 'L', 268)
-    # d = get_full_data('GreBlu9508M', 'Site4', 'Call1', 'L', 277)
-    plot_full_data(d, 1)
+    bird = 'GreBlu9508M'
+    block = 'Site1'
+    segment = 'Call1'
+    hemi = 'L'
+
+    data_dir='/auto/tdrive/mschachter/data'
+    bdir = os.path.join(data_dir, bird)
+    tdir = os.path.join(bdir, 'transforms')
+
+    # pre-load the data files
+    bs_file = os.path.join(tdir, 'BiosoundTransform_%s.h5' % bird)
+    biosound = BiosoundTransform.load(bs_file)
+
+    se_file = os.path.join(tdir, 'StimEvent_%s_%s_%s_%s.h5' % (bird,block,segment,hemi))
+    print('Loading %s...' % se_file)
+    stim_event = StimEventTransform.load(se_file, rep_types_to_load=['raw'])
+    stim_event.zscore('raw')
+    stim_event.segment_stims_from_biosound(bs_file)
+
+    pcf_file = os.path.join(tdir, 'PairwiseCF_%s_%s_%s_%s_raw.h5' % (bird,block,segment,hemi))
+    print('Loading %s...' % pcf_file)
+    pairwise_cf = PairwiseCFTransform.load(pcf_file)
+
+    # stimulus 1, a distance call
+    d1 = get_full_data('GreBlu9508M', 'Site1', 'Call1', 'L', 268, biosound=biosound, stim_event=stim_event, pairwise_cf=pairwise_cf)
+
+    # stimulus 2, a tet
+    d2 = get_full_data('GreBlu9508M', 'Site1', 'Call1', 'L', 258, biosound=biosound, stim_event=stim_event, pairwise_cf=pairwise_cf)
+
+    # stimulus 3, a begging call
+    d3 = get_full_data('GreBlu9508M', 'Site1', 'Call1', 'L', 188, biosound=biosound, stim_event=stim_event, pairwise_cf=pairwise_cf)
+
+    # plot stimulus 1, syllable 1, trial 2
+    plot_single_trial_data(d1, 1, 2)
+
+    # plot stimulus 2, syllable 0, trial 4
+    plot_single_trial_data(d2, 0, 4)
+
+    # plot stimulus 3, syllable 0, trial 0
+    plot_single_trial_data(d3, 0, 0)
 
     plt.show()
+
+    # old figure 4 plot
+    # plot_full_data(d, 1)
 
 
 if __name__ == '__main__':
