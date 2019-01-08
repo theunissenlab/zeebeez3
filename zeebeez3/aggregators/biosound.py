@@ -1,4 +1,5 @@
 import os
+import time
 from copy import deepcopy
 
 import h5py
@@ -57,9 +58,9 @@ class AggregateBiosounds(object):
                 xindex = len(self.Xraw)
                 self.Xraw.append(np.array(aprops))
                 
-                self.data['bird'].append(bird)
+                self.data['bird'].append(decode_if_bytes(bird).encode('utf8'))
                 self.data['stim_id'].append(stim_id)
-                self.data['stim_type'].append(stim_type)
+                self.data['stim_type'].append(decode_if_bytes(stim_type).encode('utf8'))
                 self.data['syllable_order'].append(syllable_order)
                 self.data['start_time'].append(start_time)
                 self.data['end_time'].append(end_time)
@@ -68,26 +69,57 @@ class AggregateBiosounds(object):
         self.df = pd.DataFrame(self.data)
         self.Xraw = np.array(self.Xraw)
         self.acoustic_props = acoustic_props
+        self.good_indices = self.detect_duplicates()
 
+    def export_to_csv(self, output_file):
+
+        d = dict()
+        for aprop in self.acoustic_props:
+            d[aprop] = list()
+        d['stim_type'] = list()
+        d['bird'] = list()
+        d['syllable_order'] = list()
+        d['duration'] = list()
+
+        for row_idx, row in self.df.iterrows():
+            xindex = row['xindex']
+            if xindex not in self.good_indices:
+                continue
+            x = self.Xraw[xindex, :]
+            dur = row['end_time'] - row['start_time']
+
+            for c in ['stim_type', 'bird', 'syllable_order']:
+                d[c].append(decode_if_bytes(row[c]))
+            d['duration'].append(dur)
+            for k,aprop in enumerate(self.acoustic_props):
+                if aprop in ACOUSTIC_FUND_PROPS and x[k] == -1:
+                    # this is a value that cannot be identified, write it as a nan
+                    x[k] = np.nan
+                d[aprop].append(x[k])
+
+        df = pd.DataFrame(d)
+        df.to_csv(output_file, header=True, index=False)
+
+    def plot(self):
         # train a whitening pca transform on the non-duplicate data
-        Xz,good_indices = self.remove_duplicates()
-        print('good_indices=',good_indices)
-        assert len(good_indices) == len(np.unique(good_indices))
+        Xz = self.Xraw[self.good_indices, :]
+        Xz -= Xz.mean(axis=0)
+        Xz /= Xz.std(axis=0, ddof=1)
 
         pca = PCA(whiten=False)
-        pca.fit(Xz[good_indices, :])
+        pca.fit(Xz)
 
         for k,evar in enumerate(np.cumsum(pca.explained_variance_ratio_)):
             print('PC %d: %0.2f' % (k, evar))
 
         # transform the raw features into whitened PCA space
-        self.Xwhitened = pca.transform(Xz)
+        Xwhitened = pca.transform(Xz)
 
         # sort the samples by call type
         index2ct = {xindex:ct for xindex,ct in zip(self.df.xindex, self.df.stim_type)}
-        index_and_ct = [(k,index2ct[k]) for k,gi in enumerate(good_indices)]
+        index_and_ct = [(k,index2ct[gi]) for k,gi in enumerate(self.good_indices)]
         index_and_ct.sort(key=operator.itemgetter(1))
-        call_type = np.array([index2ct[k] for k in good_indices])
+        call_type = np.array([index2ct[k] for k in self.good_indices])
         re_index = [x[0] for x in index_and_ct]
 
         rcParams.update({'font.size': 11})
@@ -97,7 +129,7 @@ class AggregateBiosounds(object):
 
         ax = plt.subplot(gs[0, 0])
         absmax = np.abs(Xz).max()
-        plt.imshow(Xz[good_indices, :][re_index, :], interpolation='nearest', aspect='auto', cmap=plt.cm.seismic, vmin=-4, vmax=4)
+        plt.imshow(Xz[re_index, :], interpolation='nearest', aspect='auto', cmap=plt.cm.seismic, vmin=-4, vmax=4)
         plt.xticks(np.arange(len(self.acoustic_props)), self.acoustic_props, rotation=90)
         plt.colorbar()
         plt.title('Z-scored Xraw')
@@ -112,21 +144,21 @@ class AggregateBiosounds(object):
 
         ax = plt.subplot(gs[0, 2], projection='3d')
         for ct in DECODER_CALL_TYPES:
-            i = call_type == ct
+            i = call_type == ct.encode('utf8')
             clr = CALL_TYPE_COLORS[ct]
-            ax.scatter(self.Xwhitened[i, 0], self.Xwhitened[i, 1], self.Xwhitened[i, 2], c=clr)
-        ax.set_xlim([-4, 4])
-        ax.set_ylim([-4, 4])
-        ax.set_zlim([-4, 4])
+            ax.scatter(Xwhitened[i, 0], Xwhitened[i, 1], Xwhitened[i, 2], c=clr)
+        # ax.set_xlim([-4, 4])
+        # ax.set_ylim([-4, 4])
+        # ax.set_zlim([-4, 4])
 
         ax = plt.subplot(gs[1, 0])
         absmax = 4.
-        plt.imshow(self.Xwhitened[good_indices, :][re_index, :], interpolation='nearest', aspect='auto', cmap=plt.cm.seismic, vmin=-absmax, vmax=absmax)
+        plt.imshow(Xwhitened[re_index, :], interpolation='nearest', aspect='auto', cmap=plt.cm.seismic, vmin=-absmax, vmax=absmax)
         plt.colorbar()
         plt.title('Xwhitened')
 
         ax = plt.subplot(gs[1, 1])
-        C = np.corrcoef(self.Xwhitened[good_indices, :].T)
+        C = np.corrcoef(Xwhitened.T)
         plt.imshow(C, interpolation='nearest', aspect='auto', cmap=plt.cm.seismic, origin='lower', vmin=-1, vmax=1)
         plt.colorbar()
         plt.title('Xwhitened Corrcoef')
@@ -141,12 +173,30 @@ class AggregateBiosounds(object):
 
         plt.show()
 
-        # save the essential components of the PCA
-        pca_props_to_save = ['mean_', 'components_', 'explained_variance_']
-        self.pca = pca
-        self.pca_props = {pprop:np.array(getattr(self.pca, pprop)) for pprop in pca_props_to_save}
+    def detect_outliers(self, aprops=None):
 
-    def remove_duplicates(self, aprops=None, thresh=0.99):
+        if aprops is None:
+            aprops = [aprop for aprop in self.acoustic_props if aprop not in ['meantime']]
+
+        # get rid of outliers and syllables where the fundamental can't be estimated
+        num_total_samps = self.Xraw.shape[0]
+        good_i = np.ones([num_total_samps], dtype='bool')
+        for k, aprop in enumerate(aprops):
+            x = self.Xraw[:, k]
+            if aprop not in ACOUSTIC_FUND_PROPS:
+                q1 = np.percentile(x, 1)
+                q99 = np.percentile(x, 99)
+                good_i &= (x > q1) & (x < q99)
+            else:
+                good_i &= x > 0
+
+        return good_i
+
+    def detect_duplicates(self, aprops=None, thresh=0.99, remove_outliers=False):
+        """ Identify duplicate entries (when the acoustic feature vectors are highly correlated).
+
+            Returns: A list of indices for non-duplicate acoustic feature vectors.
+        """
 
         if aprops is None:
             aprops = [aprop for aprop in self.acoustic_props if aprop not in ['meantime']]
@@ -157,16 +207,10 @@ class AggregateBiosounds(object):
             i = self.acoustic_props.index(aprop)
             Xred[:, k] = self.Xraw[:, i]
 
-        # get rid of outliers and syllables where the fundamental can't be estimated
-        good_i = np.ones([num_total_samps], dtype='bool')
-        for k,aprop in enumerate(aprops):
-            x = Xred[:, k]
-            if aprop not in ACOUSTIC_FUND_PROPS:
-                q1 = np.percentile(x, 1)
-                q99 = np.percentile(x, 99)
-                good_i &= (x > q1) & (x < q99)
-            else:
-                good_i &= x > 0
+        if remove_outliers:
+            good_i = self.detect_outliers(aprops)
+        else:
+            good_i = np.ones(self.Xraw.shape[0], dtype='bool')
 
         # hold on to the original indices
         full_indices = np.arange(num_total_samps)[good_i]
@@ -216,7 +260,7 @@ class AggregateBiosounds(object):
                 Dgood[k, j] = np.dot(x, y) / (np.linalg.norm(x)*np.linalg.norm(y))
         """
 
-        return Xz[good_indices, :],full_indices[good_indices]
+        return full_indices[good_indices]
 
     def save(self, output_file):
 
@@ -227,11 +271,7 @@ class AggregateBiosounds(object):
             hf[cname] = np.array(cvals)
 
         hf['Xraw'] = self.Xraw
-        hf['Xwhitened'] = self.Xwhitened
-
-        pca_grp = hf.create_group('pca')
-        for pprop,pval in list(self.pca_props.items()):
-            pca_grp[pprop] = np.array(pval)
+        hf['good_indices'] = self.good_indices
 
         hf.close()
 
@@ -251,12 +291,7 @@ class AggregateBiosounds(object):
         agg.acoustic_props = list(hf.attrs['acoustic_props'])
         
         agg.Xraw = np.array(hf['Xraw'])
-        agg.Xwhitened = np.array(hf['Xwhitened'])
-
-        agg.pca = PCA(whiten=True)
-        pca_grp = hf['pca']
-        for key in list(pca_grp.keys()):
-            setattr(agg.pca, key, np.array(pca_grp[key]))
+        agg.good_indices = np.array(hf['good_indices'])
 
         hf.close()
 
@@ -267,7 +302,10 @@ if __name__ == '__main__':
 
     agg_file = '/auto/tdrive/mschachter/data/aggregate/biosound.h5'
 
-    agg = AggregateBiosounds()
-    agg.transform(['GreBlu9508M', 'YelBlu6903F', 'WhiWhi4522M'])
-    agg.save(agg_file)
-    # agg = AggregateBiosounds.load(agg_file)
+    # agg = AggregateBiosounds()
+    # agg.transform(['GreBlu9508M', 'YelBlu6903F', 'WhiWhi4522M', 'BlaBro09xxF'])
+    # agg.save(agg_file)
+
+    agg = AggregateBiosounds.load(agg_file)
+    # agg.plot()
+    agg.export_to_csv('/auto/tdrive/mschachter/data/aggregate/biosound.csv')
