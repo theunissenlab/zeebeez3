@@ -1,0 +1,55 @@
+---
+title: "Analysis of aggregate biosounds"
+output: html_notebook
+---
+
+```{r}
+# required libraries
+library('PerformanceAnalytics')
+```
+
+
+
+## Introduction
+In this notebook, acoustic feature vectors that have been aggregated across birds (for the Schachter et. al study), with duplicates removed,
+are analyzed.
+
+```{r}
+
+# load all the biosound data from a csv file
+df = read.table('/auto/tdrive/mschachter/data/aggregate/biosound.csv', header=TRUE, sep=',')
+# drop mlnoise datapoints
+i = df$stim_type == 'mlnoise'
+df = subset(df, !i)
+df$stim_type = factor(df$stim_type)
+
+sprintf('Number of rows: %d', nrow(df))
+```
+
+```{r}
+# do a quick summary of the data
+summary(df)
+```
+
+```{r}
+# print number of samples by call type
+table(df$stim_type)
+```
+```{r}
+table(df$stim_type) / length(df$stim_type)
+```
+```{r}
+cols = c()
+exclude_cols = c("bird", "syllable_order", "stim_type")
+for (i in 1:ncol(df)) {
+  if (!(cnames[i] %in% exclude_cols)) {
+    cols = c(cols, cnames[i])
+  }
+}
+chart.Correlation(df[, cols], histogram=TRUE, pch=19)
+```
+
+
+
+
+
